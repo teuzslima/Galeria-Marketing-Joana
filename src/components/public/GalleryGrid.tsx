@@ -9,6 +9,18 @@ interface GalleryGridProps {
   allowDownload?: boolean;
 }
 
+function checkIsVideo(item: PublicMedia): boolean {
+  if (item.type === 'video') return true;
+  const url = (item.url || '').toLowerCase();
+  return (
+    url.endsWith('.mp4') ||
+    url.endsWith('.mov') ||
+    url.endsWith('.webm') ||
+    url.endsWith('.m4v') ||
+    url.endsWith('.quicktime')
+  );
+}
+
 export default function GalleryGrid({
   id = 'galeria',
   items = [],
@@ -40,14 +52,14 @@ export default function GalleryGrid({
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = fileName || 'foto-casamento.jpg';
+      link.download = fileName || 'arquivo-galeria';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Erro no download:', error);
-      // Fallback: se o navegador bloquear o fetch, abre o link direto
+      // Fallback: se o navegador bloquear o fetch, abre diretamente
       window.open(fileUrl, '_blank');
     } finally {
       setDownloadingId(null);
@@ -59,7 +71,7 @@ export default function GalleryGrid({
     return safeList.filter((item) => {
       if (!item) return false;
       const cat = (item.category || '').toLowerCase();
-      const isVideo = item.type === 'video' || item.url?.toLowerCase().endsWith('.mp4');
+      const isVideo = checkIsVideo(item);
 
       if (activeTab === 'takes') {
         return cat === 'takes' || (!cat && isVideo);
@@ -112,27 +124,32 @@ export default function GalleryGrid({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             {filteredItems.map((item) => {
               const isFav = favorites.has(item.id);
-              const isVideo = item.type === 'video' || item.url?.toLowerCase().endsWith('.mp4');
-              const mediaSource = item.thumbnailUrl || item.url;
+              const isVideo = checkIsVideo(item);
+              const hasDistinctThumbnail =
+                Boolean(item.thumbnailUrl) && item.thumbnailUrl !== item.url;
               const isDownloading = downloadingId === item.id;
 
               return (
                 <div
                   key={item.id}
-                  className="group relative aspect-[3/4] overflow-hidden rounded-xl bg-stone-200 shadow-sm"
+                  className="group relative aspect-[3/4] overflow-hidden rounded-xl bg-stone-900 shadow-sm"
                 >
                   {isVideo ? (
                     <video
-                      src={item.url}
-                      poster={item.thumbnailUrl}
                       controls
                       playsInline
+                      preload="metadata"
+                      poster={hasDistinctThumbnail ? item.thumbnailUrl : undefined}
                       className="h-full w-full object-cover"
-                    />
+                    >
+                      <source src={item.url} type={item.url?.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'} />
+                      <source src={item.url} type="video/webm" />
+                      O seu navegador não suporta a reprodução deste vídeo.
+                    </video>
                   ) : (
                     <img
-                      src={mediaSource}
-                      alt={item.filename || 'Fotografia do Casamento'}
+                      src={item.thumbnailUrl || item.url}
+                      alt={item.filename || 'Fotografia da Galeria'}
                       loading="lazy"
                       className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                       onError={(e) => {
@@ -144,15 +161,18 @@ export default function GalleryGrid({
                   )}
 
                   {/* Ações: Download e Favoritar */}
-                  <div className="absolute bottom-3 right-3 flex items-center gap-2 z-10">
+                  <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 z-10">
                     {allowDownload && (
                       <button
                         type="button"
-                        onClick={() => handleDownload(item.url, item.filename, item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(item.url, item.filename, item.id);
+                        }}
                         disabled={isDownloading}
                         aria-label="Baixar mídia"
-                        title="Baixar foto"
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105 disabled:opacity-50"
+                        title="Baixar mídia"
+                        className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105 disabled:opacity-50"
                       >
                         {isDownloading ? (
                           <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -171,10 +191,13 @@ export default function GalleryGrid({
 
                     <button
                       type="button"
-                      onClick={() => toggleFavorite(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(item.id);
+                      }}
                       aria-label="Favoritar"
                       title="Favoritar"
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105"
+                      className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105"
                     >
                       <svg
                         className={`w-4 h-4 transition-colors ${
