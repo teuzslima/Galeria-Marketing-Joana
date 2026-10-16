@@ -159,6 +159,42 @@ function uploadWithProgress({ bucket, path, body, contentType, accessToken, onPr
   });
 }
 
+// Upload direto para o Cloudflare R2 usando Presigned URL (Sem limite de 50MB)
+function uploadDirectToR2({
+  uploadUrl,
+  body,
+  contentType,
+  onProgress,
+}: {
+  uploadUrl: string;
+  body: Blob;
+  contentType: string;
+  onProgress: (loadedBytes: number) => void;
+}) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', contentType);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(body.size);
+        resolve();
+      } else {
+        reject(new Error(`Falha no upload para o Cloudflare R2 (Código: ${xhr.status})`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Falha de rede ao transferir para o Cloudflare R2.'));
+    xhr.onabort = () => reject(new Error('Upload cancelado.'));
+    xhr.send(body);
+  });
+}
+
 function getExtension(filename: string): string {
   const match = /\.([a-z0-9]{1,8})$/i.exec(filename);
   return match ? match[1].toLowerCase() : '';
@@ -215,7 +251,7 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
   const processTask = async (task: UploadTask & { category: 'takes' | 'editados' }) => {
     const { file, category } = task;
     const mediaType = detectMediaType(file) ?? 'photo';
-    const uploadedPaths: { bucket: string; path: string }[] = [];
+    const uploadedSupabasePaths: { bucket: string; path: string }[] = [];
 
     try {
       updateTask(task.id, { status: 'processing', progress: 2, error: undefined });
@@ -241,7 +277,6 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
 
       const uid = crypto.randomUUID();
       const ext = getExtension(file.name);
-      const originalPath = `${gallery.id}/${uid}${ext ? `.${ext}` : ''}`;
       const thumbnailPath = thumbnail ? `${gallery.id}/${uid}.${thumbnail.extension}` : null;
 
       const originalSize = file.size;
@@ -250,16 +285,50 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
 
       updateTask(task.id, { status: 'uploading', progress: 5 });
 
-      await uploadWithProgress({
-        bucket: BUCKETS.originals,
-        path: originalPath,
-        body: file,
-        contentType: file.type || 'application/octet-stream',
-        accessToken: session.access_token,
-        onProgress: (loaded) => updateTask(task.id, { progress: toPercent(loaded) }),
-      });
-      uploadedPaths.push({ bucket: BUCKETS.originals, path: originalPath });
+      let originalPath = '';
 
+      if (mediaType === 'video') {
+        // ENVIAR VÍDEO PARA CLOUDFLARE R2
+        const presignedRes = await fetch('/api/upload/presigned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            galleryId: gallery.id,
+            filename: file.name,
+            contentType: file.type || 'video/mp4',
+          }),
+        });
+
+        if (!presignedRes.ok) {
+          const errData = await presignedRes.json().catch(() => ({}));
+          throw new Error(errData.error || 'Falha ao obter URL de envio Cloudflare R2.');
+        }
+
+        const { uploadUrl, publicUrl } = await presignedRes.json();
+
+        await uploadDirectToR2({
+          uploadUrl,
+          body: file,
+          contentType: file.type || 'video/mp4',
+          onProgress: (loaded) => updateTask(task.id, { progress: toPercent(loaded) }),
+        });
+
+        originalPath = publicUrl;
+      } else {
+        // ENVIAR FOTO PARA SUPABASE STORAGE
+        originalPath = `${gallery.id}/${uid}${ext ? `.${ext}` : ''}`;
+        await uploadWithProgress({
+          bucket: BUCKETS.originals,
+          path: originalPath,
+          body: file,
+          contentType: file.type || 'application/octet-stream',
+          accessToken: session.access_token,
+          onProgress: (loaded) => updateTask(task.id, { progress: toPercent(loaded) }),
+        });
+        uploadedSupabasePaths.push({ bucket: BUCKETS.originals, path: originalPath });
+      }
+
+      // ENVIAR MINIATURA PARA SUPABASE
       if (thumbnail && thumbnailPath) {
         await uploadWithProgress({
           bucket: BUCKETS.thumbnails,
@@ -269,7 +338,7 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
           accessToken: session.access_token,
           onProgress: (loaded) => updateTask(task.id, { progress: toPercent(originalSize + loaded) }),
         });
-        uploadedPaths.push({ bucket: BUCKETS.thumbnails, path: thumbnailPath });
+        uploadedSupabasePaths.push({ bucket: BUCKETS.thumbnails, path: thumbnailPath });
       }
 
       updateTask(task.id, { status: 'saving', progress: 97 });
@@ -292,9 +361,11 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
       setMedia((prev) => [...prev, data as MediaItem]);
       updateTask(task.id, { status: 'done', progress: 100 });
     } catch (error) {
-      await Promise.all(
-        uploadedPaths.map(({ bucket, path }) => supabase.storage.from(bucket).remove([path])),
-      ).catch(() => undefined);
+      if (uploadedSupabasePaths.length > 0) {
+        await Promise.all(
+          uploadedSupabasePaths.map(({ bucket, path }) => supabase.storage.from(bucket).remove([path])),
+        ).catch(() => undefined);
+      }
 
       updateTask(task.id, {
         status: 'error',
@@ -370,12 +441,13 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
       return;
     }
 
-    await Promise.all([
-      supabase.storage.from(BUCKETS.originals).remove([item.original_storage_path]),
-      item.thumbnail_storage_path
-        ? supabase.storage.from(BUCKETS.thumbnails).remove([item.thumbnail_storage_path])
-        : Promise.resolve(),
-    ]).catch((err) => console.error('Falha ao remover arquivos do storage:', err));
+    if (!item.original_storage_path.startsWith('http')) {
+      await supabase.storage.from(BUCKETS.originals).remove([item.original_storage_path]).catch(() => undefined);
+    }
+
+    if (item.thumbnail_storage_path) {
+      await supabase.storage.from(BUCKETS.thumbnails).remove([item.thumbnail_storage_path]).catch(() => undefined);
+    }
 
     setMedia((prev) => prev.filter((m) => m.id !== item.id));
     setDeletingIds((prev) => {
