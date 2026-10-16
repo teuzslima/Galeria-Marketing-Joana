@@ -304,7 +304,7 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
           throw new Error(errData.error || 'Falha ao obter URL de envio Cloudflare R2.');
         }
 
-        const { uploadUrl, publicUrl } = await presignedRes.json();
+        const { uploadUrl, storageKey } = await presignedRes.json();
 
         await uploadDirectToR2({
           uploadUrl,
@@ -313,7 +313,7 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
           onProgress: (loaded) => updateTask(task.id, { progress: toPercent(loaded) }),
         });
 
-        originalPath = publicUrl;
+        originalPath = storageKey;
       } else {
         // ENVIAR FOTO PARA SUPABASE STORAGE
         originalPath = `${gallery.id}/${uid}${ext ? `.${ext}` : ''}`;
