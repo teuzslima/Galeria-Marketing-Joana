@@ -6,14 +6,16 @@ import type { GalleryStatus } from '@/lib/types';
 
 interface GalleryStatusToggleProps {
   galleryId: string;
-  initialStatus: GalleryStatus;
+  status?: GalleryStatus;
+  initialStatus?: GalleryStatus;
 }
 
 export default function GalleryStatusToggle({
   galleryId,
+  status: statusProp,
   initialStatus,
 }: GalleryStatusToggleProps) {
-  const [status, setStatus] = useState<GalleryStatus>(initialStatus);
+  const [status, setStatus] = useState<GalleryStatus>(statusProp || initialStatus || 'draft');
   const [loading, setLoading] = useState(false);
 
   const toggleStatus = async () => {
@@ -29,7 +31,7 @@ export default function GalleryStatusToggle({
       .eq('id', galleryId);
 
     if (error) {
-      alert(`Erro ao atualizar estado: ${error.message}`);
+      alert(`Erro ao atualizar status: ${error.message}`);
     } else {
       setStatus(nextStatus);
     }

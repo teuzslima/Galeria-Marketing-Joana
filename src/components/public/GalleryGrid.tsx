@@ -29,10 +29,9 @@ export default function GalleryGrid({
     });
   };
 
-  const safeItems = Array.isArray(items) ? items : [];
-
   const filteredItems = useMemo(() => {
-    return safeItems.filter((item) => {
+    const safeList = Array.isArray(items) ? items : [];
+    return safeList.filter((item) => {
       if (!item) return false;
       const cat = (item.category || '').toLowerCase();
       const isVideo = item.type === 'video' || item.url?.toLowerCase().endsWith('.mp4');
@@ -43,7 +42,7 @@ export default function GalleryGrid({
         return cat === 'editados' || (!cat && !isVideo);
       }
     });
-  }, [safeItems, activeTab]);
+  }, [items, activeTab]);
 
   return (
     <section id={id} className="w-full bg-[#FAF9F6] py-10 px-4 sm:px-8">
@@ -111,7 +110,6 @@ export default function GalleryGrid({
                       loading="lazy"
                       className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                       onError={(e) => {
-                        // Se a miniatura falhar ou der 404, carrega a URL original
                         if (item.url && e.currentTarget.src !== item.url) {
                           e.currentTarget.src = item.url;
                         }
@@ -119,7 +117,6 @@ export default function GalleryGrid({
                     />
                   )}
 
-                  {/* Ações: Download e Favoritar */}
                   <div className="absolute bottom-3 right-3 flex items-center gap-2 z-10">
                     {allowDownload && (
                       <a

@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MediaItem, MediaType } from '@/lib/types';
 
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export const BUCKETS = {
   originals: 'gallery-originals',
   thumbnails: 'gallery-thumbnails',
@@ -19,12 +21,8 @@ export interface PublicMedia {
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
 
-/**
- * Monta a URL pública direta de um objeto no bucket do Supabase.
- */
 export function getStoragePublicUrl(bucket: string, path: string | null | undefined): string {
   if (!path) return '';
-  // Se já for uma URL completa, retorna diretamente
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
@@ -39,9 +37,6 @@ export function getOriginalUrl(path: string | null | undefined): string {
   return getStoragePublicUrl(BUCKETS.originals, path);
 }
 
-/**
- * Converte o registro bruto do banco no formato padronizado consumido pelos componentes.
- */
 export function toPublicMedia(item: MediaItem & { category?: string }): PublicMedia {
   const originalUrl = getOriginalUrl(item.original_storage_path);
   const thumbnailUrl = item.thumbnail_storage_path
@@ -60,9 +55,6 @@ export function toPublicMedia(item: MediaItem & { category?: string }): PublicMe
   };
 }
 
-/**
- * Busca todas as mídias associadas à galeria ordenadas pela ordem de exibição.
- */
 export async function fetchAllMedia(
   supabase: SupabaseClient,
   galleryId: string,
