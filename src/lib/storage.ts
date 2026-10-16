@@ -19,17 +19,24 @@ export interface PublicMedia {
   category?: string;
 }
 
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
-const R2_PUBLIC_URL = (
+// Remove formatações acidentais de markdown [url](url), colchetes ou barras extras
+function sanitizeUrl(rawUrl: string): string {
+  if (!rawUrl) return '';
+  const match = rawUrl.match(/https?:\/\/[^\s)\]]+/);
+  const clean = match ? match[0] : rawUrl;
+  return clean.replace(/\/+$/, '');
+}
+
+const SUPABASE_URL = sanitizeUrl(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
+const R2_PUBLIC_URL = sanitizeUrl(
   process.env.NEXT_PUBLIC_R2_PUBLIC_URL ||
   'https://pub-7b9d1a95fda24253b509ad89cc85aa51.r2.dev'
-).replace(/\/+$/, '');
+);
 
 export function getStoragePublicUrl(bucket: string, path: string | null | undefined): string {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-
-  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  const cleanPath = sanitizeUrl(path).replace(/^\/+/, '');
+  if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) return cleanPath;
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${cleanPath}`;
 }
 
@@ -39,16 +46,19 @@ export function getThumbnailUrl(path: string | null | undefined): string {
 
 export function getOriginalUrl(path: string | null | undefined, type?: MediaType): string {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  
+  // Limpa se o path contiver markdown acidental ou url absoluta
+  const cleanPath = sanitizeUrl(path).replace(/^\/+/, '');
+  if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+    return cleanPath;
+  }
 
-  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-
-  // Se for vídeo, a URL vem diretamente da CDN do Cloudflare R2
+  // Se for vídeo, aponta diretamente para o R2 da Cloudflare
   if (type === 'video') {
     return `${R2_PUBLIC_URL}/${cleanPath}`;
   }
 
-  // Se for foto, continua no Supabase Storage
+  // Se for fotografia, vai ao Supabase Storage
   return `${SUPABASE_URL}/storage/v1/object/public/${BUCKETS.originals}/${cleanPath}`;
 }
 
@@ -61,7 +71,6 @@ export function toPublicMedia(item: MediaItem & { category?: string }): PublicMe
   return {
     id: item.id,
     url: originalUrl,
-    // Garante que se houver thumbnail no Supabase, ela é usada (evita o ecrã cinzento no vídeo)
     thumbnailUrl: thumbnailUrl || originalUrl,
     type: item.media_type,
     filename: item.filename,
