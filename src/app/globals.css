@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-ivory font-sans text-ink antialiased;
+  }
+
+  ::selection {
+    background-color: rgba(27, 100, 218, 0.15);
+  }
+}
+
+@layer components {
+  .signature {
+    @apply font-sans text-[10px] font-medium uppercase tracking-[0.3em] text-ink-soft sm:text-[11px] sm:tracking-signature;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-[#1B64DA] px-8 py-4 text-[11px] font-medium uppercase tracking-wideish text-white transition-colors duration-300 hover:bg-[#1550B0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#1B64DA] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 border border-ink/25 px-8 py-4 text-[11px] font-medium uppercase tracking-wideish text-ink transition-colors duration-300 hover:border-ink hover:bg-ink hover:text-ivory focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .admin-input {
+    @apply w-full rounded-md border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-ink shadow-sm outline-none transition placeholder:text-stone-400 focus:border-[#1B64DA] focus:ring-2 focus:ring-[#1B64DA]/20;
+  }
+
+  .admin-label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-ink-soft;
+  }
+
+  .admin-card {
+    @apply rounded-xl border border-stone-200 bg-white shadow-sm;
+  }
+}
+
