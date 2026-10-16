@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { GalleryStatus } from '@/lib/types';
 
-interface GalleryStatusToggleProps {
+export interface GalleryStatusToggleProps {
   galleryId: string;
   status?: GalleryStatus;
   initialStatus?: GalleryStatus;
@@ -55,7 +55,7 @@ export default function GalleryStatusToggle({
           status === 'published' ? 'bg-emerald-500' : 'bg-amber-500'
         }`}
       />
-      {loading ? 'A guardar…' : status === 'published' ? 'Publicada' : 'Rascunho'}
+      {loading ? 'Salvando…' : status === 'published' ? 'Publicada' : 'Rascunho'}
     </button>
   );
 }
