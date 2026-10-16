@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({
             request,
@@ -33,24 +33,28 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname.startsWith('/admin/login');
-  const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');
+  // Proteger rotas /admin (exceto a página de login)
+  const isAuthPage = request.nextUrl.pathname.startsWith('/admin/login');
+  const isAdminPage = request.nextUrl.pathname.startsWith('/admin');
 
-  // 1. Se não estiver autenticado e tentar aceder a qualquer área /admin (exceto o login), vai para o login
-  if (!user && isAdminRoute && !isLoginPage) {
-    const loginUrl = new URL('/admin/login', request.url);
-    loginUrl.searchParams.set('next', request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+  if (isAdminPage && !isAuthPage && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/admin/login';
+    return NextResponse.redirect(url);
   }
 
-  // 2. Se já estiver com sessão iniciada e aceder ao ecrã de login, segue diretamente para o dashboard
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+  if (isAuthPage && user) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/admin/dashboard';
+    return NextResponse.redirect(url);
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: [
+    '/admin/:path*',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };
