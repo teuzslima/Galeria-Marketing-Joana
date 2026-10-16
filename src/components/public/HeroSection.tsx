@@ -74,7 +74,7 @@ export default function HeroSection({
         </div>
 
         {gallery.welcome_message && (
-          <p className="mt-3 max-w-xl text-xs sm:text-sm text-white/80 italic font-serif leading-relaxed line-clamp-3">
+          <p className="mt-3 max-w-xl text-xs sm:text-sm text-white/90 italic font-serif leading-relaxed line-clamp-3">
             {gallery.welcome_message}
           </p>
         )}
