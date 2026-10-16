@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { Gallery } from '@/lib/types';
 import { formatEventDate } from '@/lib/utils/format';
+import { getOriginalUrl } from '@/lib/storage';
 
 interface HeroSectionProps {
   gallery: Pick<Gallery, 'id' | 'title' | 'client_name' | 'event_date' | 'welcome_message'>;
@@ -20,6 +22,12 @@ export default function HeroSection({
 }: HeroSectionProps) {
   const formattedDate = formatEventDate(gallery.event_date);
 
+  // Garante a URL pública absoluta, seja caminho do storage ou URL externa
+  const resolvedCoverUrl = useMemo(() => {
+    if (!coverUrl) return null;
+    return getOriginalUrl(coverUrl);
+  }, [coverUrl]);
+
   const scrollToGallery = () => {
     document.getElementById(galleryAnchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -32,21 +40,24 @@ export default function HeroSection({
         </div>
       )}
 
-      {/* Foto do Casal nítida em ecrã inteiro */}
-      {coverUrl ? (
+      {/* Foto do Casal em ecrã inteiro */}
+      {resolvedCoverUrl ? (
         <img
-          src={coverUrl}
+          src={resolvedCoverUrl}
           alt={gallery.title}
           className="absolute inset-0 h-full w-full object-cover object-center"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
         />
       ) : (
         <div className="absolute inset-0 bg-neutral-950" />
       )}
 
-      {/* Degradê cinematográfico escuro na parte inferior para o texto ficar 100% legível */}
+      {/* Degradê cinematográfico escuro na parte inferior */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/20" />
 
-      {/* Conteúdo textual no rodapé da foto (conforme o modelo de referência) */}
+      {/* Conteúdo textual */}
       <div className="relative z-10 flex h-full flex-col justify-end px-6 pb-14 sm:px-12 sm:pb-16 max-w-5xl mx-auto">
         {formattedDate && (
           <p className="text-xs tracking-[0.25em] text-white/80 font-mono mb-2 uppercase">

@@ -14,8 +14,9 @@ export default function GalleryGrid({
   items = [],
   allowDownload = true,
 }: GalleryGridProps) {
-  const [activeTab, setActiveTab] = useState<'takes' | 'editados'>('takes');
+  const [activeTab, setActiveTab] = useState<'takes' | 'editados'>('editados');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const toggleFavorite = (itemId: string) => {
     setFavorites((prev) => {
@@ -27,6 +28,30 @@ export default function GalleryGrid({
       }
       return next;
     });
+  };
+
+  const handleDownload = async (fileUrl: string, fileName: string, itemId: string) => {
+    try {
+      setDownloadingId(itemId);
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error('Falha ao descarregar ficheiro');
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || 'foto-casamento.jpg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Erro no download:', error);
+      // Fallback: se o navegador bloquear o fetch, abre o link direto
+      window.open(fileUrl, '_blank');
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const filteredItems = useMemo(() => {
@@ -89,6 +114,7 @@ export default function GalleryGrid({
               const isFav = favorites.has(item.id);
               const isVideo = item.type === 'video' || item.url?.toLowerCase().endsWith('.mp4');
               const mediaSource = item.thumbnailUrl || item.url;
+              const isDownloading = downloadingId === item.id;
 
               return (
                 <div
@@ -117,26 +143,30 @@ export default function GalleryGrid({
                     />
                   )}
 
+                  {/* Ações: Download e Favoritar */}
                   <div className="absolute bottom-3 right-3 flex items-center gap-2 z-10">
                     {allowDownload && (
-                      <a
-                        href={item.url}
-                        download={item.filename || true}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(item.url, item.filename, item.id)}
+                        disabled={isDownloading}
                         aria-label="Baixar mídia"
                         title="Baixar foto"
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105 disabled:opacity-50"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                          />
-                        </svg>
-                      </a>
+                        {isDownloading ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                            />
+                          </svg>
+                        )}
+                      </button>
                     )}
 
                     <button
