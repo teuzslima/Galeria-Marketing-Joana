@@ -59,7 +59,6 @@ export default function GalleryGrid({
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Erro no download:', error);
-      // Fallback: se o navegador bloquear o fetch, abre diretamente
       window.open(fileUrl, '_blank');
     } finally {
       setDownloadingId(null);
@@ -126,8 +125,14 @@ export default function GalleryGrid({
               const isFav = favorites.has(item.id);
               const isVideo = checkIsVideo(item);
               const hasDistinctThumbnail =
-                Boolean(item.thumbnailUrl) && item.thumbnailUrl !== item.url;
+                Boolean(item.thumbnailUrl) &&
+                item.thumbnailUrl !== item.url &&
+                !item.thumbnailUrl.toLowerCase().endsWith('.mov') &&
+                !item.thumbnailUrl.toLowerCase().endsWith('.mp4');
               const isDownloading = downloadingId === item.id;
+              
+              // Adiciona #t=0.001 para forçar o Safari/iOS a renderizar o 1º frame como capa
+              const videoSrcWithTime = item.url ? `${item.url}#t=0.001` : '';
 
               return (
                 <div
@@ -142,8 +147,11 @@ export default function GalleryGrid({
                       poster={hasDistinctThumbnail ? item.thumbnailUrl : undefined}
                       className="h-full w-full object-cover"
                     >
-                      <source src={item.url} type={item.url?.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'} />
-                      <source src={item.url} type="video/webm" />
+                      <source
+                        src={videoSrcWithTime}
+                        type={item.url?.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'}
+                      />
+                      <source src={videoSrcWithTime} type="video/webm" />
                       O seu navegador não suporta a reprodução deste vídeo.
                     </video>
                   ) : (
