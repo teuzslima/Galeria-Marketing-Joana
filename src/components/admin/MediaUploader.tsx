@@ -16,7 +16,7 @@ import type {
 const MAX_CONCURRENT_UPLOADS = 3;
 const THUMB_MAX_SIZE = 1600;
 const THUMB_QUALITY = 0.8;
-const VIDEO_FRAME_TIMEOUT_MS = 20000;
+const VIDEO_FRAME_TIMEOUT_MS = 15000;
 const ACCEPTED_TYPES = 'image/*,video/*';
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
@@ -73,37 +73,44 @@ async function createImageThumbnail(file: File): Promise<GeneratedThumbnail> {
 async function createVideoThumbnail(file: File): Promise<GeneratedThumbnail> {
   const url = URL.createObjectURL(file);
   const video = document.createElement('video');
-  video.preload = 'auto';
+  video.preload = 'metadata';
   video.muted = true;
   video.playsInline = true;
-  video.src = url;
 
   try {
     await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error('Tempo esgotado ao ler o vídeo.')), VIDEO_FRAME_TIMEOUT_MS);
-      video.onloadeddata = () => {
+      const timer = window.setTimeout(
+        () => reject(new Error('Tempo esgotado ao extrair miniatura do vídeo.')),
+        VIDEO_FRAME_TIMEOUT_MS
+      );
+
+      const captureFrame = () => {
         window.clearTimeout(timer);
         resolve();
       };
+
+      video.onloadeddata = () => {
+        try {
+          video.currentTime = 0.1;
+        } catch {
+          captureFrame();
+        }
+      };
+
+      video.onseeked = captureFrame;
+
       video.onerror = () => {
         window.clearTimeout(timer);
         reject(new Error('Formato de vídeo não suportado pelo navegador.'));
       };
+
+      video.src = url;
     });
 
-    const target = Math.min(1, (Number.isFinite(video.duration) ? video.duration : 0) / 2);
-    if (target > 0) {
-      await new Promise<void>((resolve) => {
-        const timer = window.setTimeout(resolve, 5000);
-        video.onseeked = () => {
-          window.clearTimeout(timer);
-          resolve();
-        };
-        video.currentTime = target;
-      });
-    }
+    const width = video.videoWidth || 720;
+    const height = video.videoHeight || 1280;
 
-    return await renderThumbnail(video, video.videoWidth, video.videoHeight);
+    return await renderThumbnail(video, width, height);
   } finally {
     video.removeAttribute('src');
     video.load();
@@ -159,7 +166,6 @@ function uploadWithProgress({ bucket, path, body, contentType, accessToken, onPr
   });
 }
 
-// Upload direto para o Cloudflare R2 usando Presigned URL (Sem limite de 50MB)
 function uploadDirectToR2({
   uploadUrl,
   body,
@@ -288,7 +294,6 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
       let originalPath = '';
 
       if (mediaType === 'video') {
-        // ENVIAR VÍDEO PARA CLOUDFLARE R2
         const presignedRes = await fetch('/api/upload/presigned', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -315,7 +320,6 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
 
         originalPath = storageKey;
       } else {
-        // ENVIAR FOTO PARA SUPABASE STORAGE
         originalPath = `${gallery.id}/${uid}${ext ? `.${ext}` : ''}`;
         await uploadWithProgress({
           bucket: BUCKETS.originals,
@@ -328,7 +332,6 @@ export default function MediaUploader({ gallery, initialMedia }: MediaUploaderPr
         uploadedSupabasePaths.push({ bucket: BUCKETS.originals, path: originalPath });
       }
 
-      // ENVIAR MINIATURA PARA SUPABASE
       if (thumbnail && thumbnailPath) {
         await uploadWithProgress({
           bucket: BUCKETS.thumbnails,
