@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import type { PublicMedia } from '@/lib/storage';
 
 interface GalleryGridProps {
@@ -18,6 +18,127 @@ function checkIsVideo(item: PublicMedia): boolean {
     url.endsWith('.webm') ||
     url.endsWith('.m4v') ||
     url.endsWith('.quicktime')
+  );
+}
+
+function VideoCard({
+  item,
+  isFav,
+  isDownloading,
+  allowDownload,
+  onToggleFavorite,
+  onDownload,
+}: {
+  item: PublicMedia;
+  isFav: boolean;
+  isDownloading: boolean;
+  allowDownload: boolean;
+  onToggleFavorite: () => void;
+  onDownload: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const hasDistinctThumbnail =
+    Boolean(item.thumbnailUrl) &&
+    item.thumbnailUrl !== item.url &&
+    !item.thumbnailUrl.toLowerCase().endsWith('.mov') &&
+    !item.thumbnailUrl.toLowerCase().endsWith('.mp4');
+
+  const handleTogglePlay = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={handleTogglePlay}
+      className="group relative aspect-[3/4] cursor-pointer overflow-hidden rounded-xl bg-stone-900 shadow-sm"
+    >
+      <video
+        ref={videoRef}
+        src={item.url}
+        poster={hasDistinctThumbnail ? item.thumbnailUrl : undefined}
+        preload="metadata"
+        playsInline
+        controls={isPlaying}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        className="h-full w-full object-cover"
+      />
+
+      {/* Camada e botão de Play enquanto o vídeo não está em reprodução */}
+      {!isPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/25 transition-all group-hover:bg-black/40">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-stone-900 shadow-lg backdrop-blur-md transition-transform group-hover:scale-110">
+            <svg className="ml-1 h-5 w-5 fill-current" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      )}
+
+      {/* Ações: Download e Favoritar */}
+      <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 z-20">
+        {allowDownload && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownload();
+            }}
+            disabled={isDownloading}
+            aria-label="Baixar mídia"
+            title="Baixar mídia"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105 disabled:opacity-50"
+          >
+            {isDownloading ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+            )}
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          aria-label="Favoritar"
+          title="Favoritar"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/90 shadow hover:scale-105"
+        >
+          <svg
+            className={`w-4 h-4 transition-colors ${
+              isFav ? 'fill-red-500 text-red-500' : 'text-white fill-transparent'
+            }`}
+            stroke="currentColor"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -124,49 +245,38 @@ export default function GalleryGrid({
             {filteredItems.map((item) => {
               const isFav = favorites.has(item.id);
               const isVideo = checkIsVideo(item);
-              const hasDistinctThumbnail =
-                Boolean(item.thumbnailUrl) &&
-                item.thumbnailUrl !== item.url &&
-                !item.thumbnailUrl.toLowerCase().endsWith('.mov') &&
-                !item.thumbnailUrl.toLowerCase().endsWith('.mp4');
               const isDownloading = downloadingId === item.id;
-              
-              // Adiciona #t=0.001 para forçar o Safari/iOS a renderizar o 1º frame como capa
-              const videoSrcWithTime = item.url ? `${item.url}#t=0.001` : '';
+
+              if (isVideo) {
+                return (
+                  <VideoCard
+                    key={item.id}
+                    item={item}
+                    isFav={isFav}
+                    isDownloading={isDownloading}
+                    allowDownload={allowDownload}
+                    onToggleFavorite={() => toggleFavorite(item.id)}
+                    onDownload={() => handleDownload(item.url, item.filename, item.id)}
+                  />
+                );
+              }
 
               return (
                 <div
                   key={item.id}
                   className="group relative aspect-[3/4] overflow-hidden rounded-xl bg-stone-900 shadow-sm"
                 >
-                  {isVideo ? (
-                    <video
-                      controls
-                      playsInline
-                      preload="metadata"
-                      poster={hasDistinctThumbnail ? item.thumbnailUrl : undefined}
-                      className="h-full w-full object-cover"
-                    >
-                      <source
-                        src={videoSrcWithTime}
-                        type={item.url?.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'}
-                      />
-                      <source src={videoSrcWithTime} type="video/webm" />
-                      O seu navegador não suporta a reprodução deste vídeo.
-                    </video>
-                  ) : (
-                    <img
-                      src={item.thumbnailUrl || item.url}
-                      alt={item.filename || 'Fotografia da Galeria'}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                      onError={(e) => {
-                        if (item.url && e.currentTarget.src !== item.url) {
-                          e.currentTarget.src = item.url;
-                        }
-                      }}
-                    />
-                  )}
+                  <img
+                    src={item.thumbnailUrl || item.url}
+                    alt={item.filename || 'Fotografia da Galeria'}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    onError={(e) => {
+                      if (item.url && e.currentTarget.src !== item.url) {
+                        e.currentTarget.src = item.url;
+                      }
+                    }}
+                  />
 
                   {/* Ações: Download e Favoritar */}
                   <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 z-10">
