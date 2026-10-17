@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import type { PublicMedia } from '@/lib/storage';
 
 interface GalleryGridProps {
@@ -38,12 +38,55 @@ function VideoCard({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [generatedPoster, setGeneratedPoster] = useState<string | null>(null);
 
   const hasDistinctThumbnail =
     Boolean(item.thumbnailUrl) &&
     item.thumbnailUrl !== item.url &&
     !item.thumbnailUrl.toLowerCase().endsWith('.mov') &&
     !item.thumbnailUrl.toLowerCase().endsWith('.mp4');
+
+  // Gera o poster dinamicamente caso o vídeo não possua miniatura gravada
+  useEffect(() => {
+    if (hasDistinctThumbnail || !item.url) return;
+
+    let isMounted = true;
+    const tempVideo = document.createElement('video');
+    tempVideo.crossOrigin = 'anonymous';
+    tempVideo.preload = 'metadata';
+    tempVideo.muted = true;
+    tempVideo.playsInline = true;
+    tempVideo.src = item.url;
+
+    const onSeeked = () => {
+      if (!isMounted) return;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = tempVideo.videoWidth || 360;
+        canvas.height = tempVideo.videoHeight || 640;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          setGeneratedPoster(dataUrl);
+        }
+      } catch {
+        // Se as políticas de CORS bloquearem a leitura do canvas, mantém o fundo escuro
+      }
+    };
+
+    tempVideo.onloadeddata = () => {
+      tempVideo.currentTime = 0.1;
+    };
+
+    tempVideo.onseeked = onSeeked;
+
+    return () => {
+      isMounted = false;
+      tempVideo.removeAttribute('src');
+      tempVideo.load();
+    };
+  }, [item.url, hasDistinctThumbnail]);
 
   const handleTogglePlay = () => {
     if (!videoRef.current) return;
@@ -55,6 +98,10 @@ function VideoCard({
     }
   };
 
+  const currentPoster = hasDistinctThumbnail
+    ? item.thumbnailUrl
+    : (generatedPoster || undefined);
+
   return (
     <div
       onClick={handleTogglePlay}
@@ -63,7 +110,7 @@ function VideoCard({
       <video
         ref={videoRef}
         src={item.url}
-        poster={hasDistinctThumbnail ? item.thumbnailUrl : undefined}
+        poster={currentPoster}
         preload="metadata"
         playsInline
         controls={isPlaying}
@@ -72,9 +119,9 @@ function VideoCard({
         className="h-full w-full object-cover"
       />
 
-      {/* Camada e botão de Play enquanto o vídeo não está em reprodução */}
+      {/* Camada e botão de Play enquanto o vídeo não estiver ativo */}
       {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/25 transition-all group-hover:bg-black/40">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-all group-hover:bg-black/45">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-stone-900 shadow-lg backdrop-blur-md transition-transform group-hover:scale-110">
             <svg className="ml-1 h-5 w-5 fill-current" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
